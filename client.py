@@ -2,6 +2,7 @@ import requests
 import logging
 import os
 import http.client
+import argparse
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
@@ -100,7 +101,6 @@ class BHClient:
         resp.raise_for_status()
         resp_json = resp.json()['medias']
         logging.debug('Retrieved %d media links', len(resp_json))
-        print(resp.json())
         for media_id, media_data in resp_json.items():
             if not os.path.exists(self.DOWNLOAD_DIR):
                 os.makedirs(self.DOWNLOAD_DIR)
@@ -122,6 +122,12 @@ class BHClient:
 if __name__ == "__main__":
     load_dotenv()
     load_dotenv(find_dotenv(usecwd=True))
+    
+    parser = argparse.ArgumentParser(description='Download Bright Horizons attachments')
+    parser.add_argument('--days', type=int, default=7,
+                      help='Number of days to look back for attachments (default: 7)')
+    args = parser.parse_args()
+
     username = os.getenv("BH_USERNAME")
     password = os.getenv("BH_PASSWORD")
     if not username or not password:
@@ -131,8 +137,8 @@ if __name__ == "__main__":
     client.log_in()
     client.retrieve_children()
 
-    # go through the last 30 days, possible duplicates but will handle dedupe in download stage
-    for i in range(30):
+    # go through the specified number of days, possible duplicates but will handle dedupe in download stage
+    for i in range(args.days):
         today = datetime.now() - timedelta(days=i)
         attachments = client.retrieve_attachments(today)
         client.download_attachments(attachments)

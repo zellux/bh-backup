@@ -10,7 +10,6 @@ Usage:
    cp .env.example .env
    ```
 
-
 2. Install dependencies:
    ```
    pip install -r requirements.txt
@@ -18,13 +17,14 @@ Usage:
 
 3. Run the script:
    ```
-   python client.py
+   python client.py [--days N]
    ```
+   Where `N` is the number of days to look back for attachments (default: 7)
 
 The script will:
 - Log in to your Bright Horizons account
 - Retrieve your children's profiles
-- Download all attachments (photos, videos, etc.) from the last 30 days
+- Download all attachments (photos, videos, etc.) from the specified number of days
 - Save attachments to a 'downloads' directory, organized by date
 - Skip any files that have already been downloaded
 
