@@ -2,6 +2,7 @@ import requests
 import logging
 import os
 import http.client
+from dotenv import load_dotenv, find_dotenv
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
@@ -119,6 +120,8 @@ class BHClient:
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     username = os.getenv("BH_USERNAME")
     password = os.getenv("BH_PASSWORD")
     if not username or not password:

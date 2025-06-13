@@ -2,11 +2,14 @@
 
 Usage:
 
-1. Set environment variables:
+(Tested with Python 3.13, older version might not work)
+
+1. Copy `.env.example` to `.env` and provide username and password in `.env` file
+
    ```
-   export BH_USERNAME="your_username"
-   export BH_PASSWORD="your_password" 
+   cp .env.example .env
    ```
+
 
 2. Install dependencies:
    ```
