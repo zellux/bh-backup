@@ -3,6 +3,7 @@ import logging
 import os
 import http.client
 import argparse
+from dataclasses import dataclass
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
@@ -14,16 +15,23 @@ logging.basicConfig(level=logging.INFO)
 # requests_log.setLevel(logging.DEBUG)
 # requests_log.propagate = True
 
+@dataclass
 class BHAttachment:
-    def __init__(self, id, attachment_id, for_date):
-        self.id = id
-        self.attachment_id = attachment_id
-        self.for_date = for_date
+    id: str
+    attachment_id: str
+    for_date: str
 
 class BHClient:
     BRIGHT_HORIZONS_BASE = 'https://bhlogin.brighthorizons.com'
     API_BASE = 'https://mbdgw.brighthorizons.com'
     DOWNLOAD_DIR = 'downloads'
+
+    # API endpoints
+    AUTH_ENDPOINT = f'{API_BASE}/auth/parent'
+    PROFILE_ENDPOINT = f'{API_BASE}/parent/user/profile'
+    GUARDIAN_ENDPOINT = f'{API_BASE}/parent/dependents/guardian'
+    MEDIA_ENDPOINT = f'{API_BASE}/parent/dependent/memories/media'
+    DOWNLOAD_LINK_ENDPOINT = f'{API_BASE}/parent/medias'
 
     def __init__(self, username, password):
         self.username = username
@@ -47,7 +55,7 @@ class BHClient:
 
     def log_in(self):
         if self.access_token is None:
-            auth_response = self.session.post('https://mbdgw.brighthorizons.com/auth/parent', json={
+            auth_response = self.session.post(self.AUTH_ENDPOINT, json={
                 "username": self.username,
                 "password": self.password
             })
@@ -61,18 +69,18 @@ class BHClient:
         })
         logging.debug('access_token: %s', self.access_token)
         logging.info('Login successful!')
-        
+
 
     def retrieve_children(self):
         logging.debug('Session headers before request: %s', self.session.headers)
-        profile_response = self.session.get(f'{self.API_BASE}/parent/user/profile')
+        profile_response = self.session.get(self.PROFILE_ENDPOINT)
         profile_response.raise_for_status()
         self.profile = profile_response.json()
         self.guardian_id = self.profile.get("id")
         logging.debug('guardian_id: %s', self.guardian_id)
 
         today = datetime.now().strftime('%Y-%m-%d')
-        children_response = self.session.get(f'{self.API_BASE}/parent/dependents/guardian/{self.guardian_id}/{today}?device_timezone=America/Los_Angeles')
+        children_response = self.session.get(f'{self.GUARDIAN_ENDPOINT}/{self.guardian_id}/{today}?device_timezone=America/Los_Angeles')
         children_response.raise_for_status()
         logging.debug('Children response: %s', children_response.text)
         self.dependents = [e['id'] for e in children_response.json()['dependents']]
@@ -83,17 +91,17 @@ class BHClient:
     def retrieve_attachments(self, date) -> list[BHAttachment]:
         start_date = (date - timedelta(days=2)).strftime('%Y-%m-%d')
         end_date = date.strftime('%Y-%m-%d')
-        resp = self.session.post(f'{self.API_BASE}/parent/dependent/memories/media?start_date={start_date}&end_date={end_date}', json=self.dependents)
+        resp = self.session.post(f'{self.MEDIA_ENDPOINT}?start_date={start_date}&end_date={end_date}', json=self.dependents)
         resp.raise_for_status()
         logging.debug('Retrieved %d attachment ids', len(resp.json()))
         attachments = []
         for e in resp.json():
             attachments.append(BHAttachment(id=e['id'], attachment_id=e['attachment_id'], for_date=e['for_date']))
         return attachments
-    
+
     def download_attachments(self, attachments: list[BHAttachment]):
         logging.info('Downloading %d attachments', len(attachments))
-        resp = self.session.post(f'{self.API_BASE}/parent/medias', json={
+        resp = self.session.post(self.DOWNLOAD_LINK_ENDPOINT, json={
             'mediaids': [a.attachment_id for a in attachments],
             'thumbnail': False,
         })
@@ -122,7 +130,7 @@ class BHClient:
 if __name__ == "__main__":
     load_dotenv()
     load_dotenv(find_dotenv(usecwd=True))
-    
+
     parser = argparse.ArgumentParser(description='Download Bright Horizons attachments')
     parser.add_argument('--days', type=int, default=7,
                       help='Number of days to look back for attachments (default: 7)')
@@ -132,7 +140,7 @@ if __name__ == "__main__":
     password = os.getenv("BH_PASSWORD")
     if not username or not password:
         raise ValueError("BH_USERNAME and BH_PASSWORD must be set")
-    
+
     client = BHClient(os.getenv("BH_USERNAME"), os.getenv("BH_PASSWORD"))
     client.log_in()
     client.retrieve_children()
