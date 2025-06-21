@@ -41,6 +41,7 @@ class BHClient:
         self._children = None
         self.profile = None
         self.guardian_id = None
+        self.downloaded_attachments = set()
 
         self.session.headers.update({
             'Accept': '*/*',
@@ -100,19 +101,29 @@ class BHClient:
         return attachments
 
     def download_attachments(self, attachments: list[BHAttachment]):
-        logging.info('Downloading %d attachments', len(attachments))
+        # Filter out attachments that have already been downloaded
+        new_attachments = [a for a in attachments if a.attachment_id not in self.downloaded_attachments]
+
+        if not new_attachments:
+            logging.info('All attachments have already been downloaded')
+            return {}
+
         resp = self.session.post(self.DOWNLOAD_LINK_ENDPOINT, json={
-            'mediaids': [a.attachment_id for a in attachments],
+            'mediaids': [a.attachment_id for a in new_attachments],
             'thumbnail': False,
         })
-        attachment_id_to_date = {a.attachment_id: a.for_date for a in attachments}
+        attachment_id_to_date = {a.attachment_id: a.for_date for a in new_attachments}
         resp.raise_for_status()
         resp_json = resp.json()['medias']
         logging.debug('Retrieved %d media links', len(resp_json))
-        for media_id, media_data in resp_json.items():
-            if not os.path.exists(self.DOWNLOAD_DIR):
-                os.makedirs(self.DOWNLOAD_DIR)
 
+        if not os.path.exists(self.DOWNLOAD_DIR):
+            os.makedirs(self.DOWNLOAD_DIR)
+        for media_id, media_data in resp_json.items():
+            if media_id in self.downloaded_attachments:
+                continue
+
+            self.downloaded_attachments.add(media_id)
             filename = f'{self.DOWNLOAD_DIR}/{attachment_id_to_date[media_id]}_{media_data['filename']}'
             if os.path.exists(filename):
                 logging.info('Skipping %s because it already exists', filename)

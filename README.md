@@ -1,5 +1,7 @@
 # Bright Horizon Attachment Downloader
 
+Implemented using [vibe coding](https://en.wikipedia.org/wiki/Vibe_coding) for the majority of time, except for API reverse engineering (w/ [mitmproxy](https://mitmproxy.org/)).
+
 Usage:
 
 (Tested with Python 3.13, older version might not work)
