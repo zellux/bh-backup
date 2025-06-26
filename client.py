@@ -105,8 +105,8 @@ class BHClient:
         new_attachments = [a for a in attachments if a.attachment_id not in self.downloaded_attachments]
 
         if not new_attachments:
-            logging.info('All attachments have already been downloaded')
-            return {}
+            logging.debug('All attachments have already been downloaded')
+            return 0
 
         resp = self.session.post(self.DOWNLOAD_LINK_ENDPOINT, json={
             'mediaids': [a.attachment_id for a in new_attachments],
@@ -119,6 +119,8 @@ class BHClient:
 
         if not os.path.exists(self.DOWNLOAD_DIR):
             os.makedirs(self.DOWNLOAD_DIR)
+        
+        downloaded_count = 0
         for media_id, media_data in resp_json.items():
             if media_id in self.downloaded_attachments:
                 continue
@@ -126,7 +128,7 @@ class BHClient:
             self.downloaded_attachments.add(media_id)
             filename = f'{self.DOWNLOAD_DIR}/{attachment_id_to_date[media_id]}_{media_data['filename']}'
             if os.path.exists(filename):
-                logging.info('Skipping %s because it already exists', filename)
+                logging.debug('Skipping %s because it already exists', filename)
                 continue
 
             resp = self.session.get(media_data['signed_url'])
@@ -134,8 +136,9 @@ class BHClient:
             with open(filename, 'wb') as f:
                 f.write(resp.content)
             logging.info('Downloaded %s', filename)
+            downloaded_count += 1
 
-        return resp_json
+        return downloaded_count
 
 
 if __name__ == "__main__":
@@ -156,8 +159,15 @@ if __name__ == "__main__":
     client.log_in()
     client.retrieve_children()
 
+    total_downloaded = 0
     # go through the specified number of days, possible duplicates but will handle dedupe in download stage
     for i in range(args.days):
         today = datetime.now() - timedelta(days=i)
         attachments = client.retrieve_attachments(today)
-        client.download_attachments(attachments)
+        downloaded_count = client.download_attachments(attachments)
+        total_downloaded += downloaded_count
+
+    print(f"\n=== Download Summary ===")
+    print(f"Total attachments tracked (including previous sessions): {len(client.downloaded_attachments)}")
+    print(f"Total attachments downloaded in this session: {total_downloaded}")
+    print(f"Files saved to: {client.DOWNLOAD_DIR}/")
