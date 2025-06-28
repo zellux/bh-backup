@@ -3,6 +3,7 @@ import logging
 import os
 import http.client
 import argparse
+import json
 from dataclasses import dataclass
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime, timedelta
@@ -25,6 +26,7 @@ class BHClient:
     BRIGHT_HORIZONS_BASE = 'https://bhlogin.brighthorizons.com'
     API_BASE = 'https://mbdgw.brighthorizons.com'
     DOWNLOAD_DIR = 'downloads'
+    TOKEN_CACHE_FILE = '.access_token'
 
     # API endpoints
     AUTH_ENDPOINT = f'{API_BASE}/auth/parent'
@@ -54,16 +56,72 @@ class BHClient:
             'Mbd-Server-Dependency': '2',
         })
 
-    def log_in(self):
-        if self.access_token is None:
-            auth_response = self.session.post(self.AUTH_ENDPOINT, json={
-                "username": self.username,
-                "password": self.password
-            })
-            auth_response.raise_for_status()
+    def _load_cached_token(self):
+        """Load access token from cache file if it exists."""
+        if not os.path.exists(self.TOKEN_CACHE_FILE):
+            return None
+        
+        try:
+            with open(self.TOKEN_CACHE_FILE, 'r') as f:
+                token_data = json.load(f)
+            
+            logging.debug('Loaded cached access token')
+            return token_data['access_token']
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logging.debug('Failed to load cached token: %s', e)
+            return None
 
-            auth_response_json = auth_response.json()
-            self.access_token = auth_response_json.get("accessToken")
+    def _save_cached_token(self, access_token):
+        """Save access token to cache file with timestamp."""
+        token_data = {
+            'access_token': access_token,
+            'cached_at': datetime.now().isoformat()
+        }
+        try:
+            with open(self.TOKEN_CACHE_FILE, 'w') as f:
+                json.dump(token_data, f)
+            logging.debug('Saved access token to cache')
+        except Exception as e:
+            logging.warning('Failed to save token to cache: %s', e)
+
+    def _test_token_validity(self):
+        """Test if the current access token is still valid by making a simple API call."""
+        try:
+            # Try to get the profile endpoint which requires authentication
+            response = self.session.get(self.PROFILE_ENDPOINT)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def log_in(self):
+        # Try to load cached token first
+        cached_token = self._load_cached_token()
+        if cached_token:
+            self.access_token = cached_token
+            self.session.headers.update({
+                'Authorization': f'Bearer {self.access_token}'
+            })
+            
+            # Test if the cached token is still valid
+            if self._test_token_validity():
+                logging.info('Using cached access token')
+                return
+            else:
+                logging.info('Cached token is invalid, performing fresh login...')
+
+        # If no cached token or invalid, perform fresh login
+        logging.info('Performing fresh login...')
+        auth_response = self.session.post(self.AUTH_ENDPOINT, json={
+            "username": self.username,
+            "password": self.password
+        })
+        auth_response.raise_for_status()
+
+        auth_response_json = auth_response.json()
+        self.access_token = auth_response_json.get("accessToken")
+
+        # Cache the new token
+        self._save_cached_token(self.access_token)
 
         self.session.headers.update({
             'Authorization': f'Bearer {self.access_token}'
